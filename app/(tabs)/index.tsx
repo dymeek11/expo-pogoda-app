@@ -1,98 +1,282 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from "react";
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import {
+  ActivityIndicator,
+  Button,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
-export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
+import { getUserLocation } from "../../src/services/locationService";
+import { getWeather } from "../../src/services/weatherService";
+
+import {
+  getWeatherCache,
+  saveWeather,
+} from "../../src/storage/cache";
+
+import { WeatherResponse } from "../../src/types/weather";
+
+import HourlyForecast from "../../src/components/HourlyForecast";
+import MapCard from "../../src/components/MapCard";
+import TemperatureChart from "../../src/components/TemperatureChart";
+
+export default function Index() {
+
+  const [weather, setWeather] =
+    useState<WeatherResponse | null>(null);
+
+  const [loading, setLoading] =
+    useState<boolean>(false);
+
+  const [error, setError] =
+    useState<string | null>(null);
+
+  const [coords, setCoords] = useState({
+    latitude: 0,
+    longitude: 0,
+  });
+
+  const [locationName, setLocationName] =
+    useState("");
+
+  const loadWeather = async () => {
+
+    try {
+
+      setLoading(true);
+      setError(null);
+
+      // GPS + reverse geocoding
+      const location =
+        await getUserLocation();
+
+      setCoords({
+        latitude: location.latitude,
+        longitude: location.longitude,
+      });
+
+      setLocationName(
+        `${location.city}, ${location.region}, ${location.country}`
+      );
+
+      // WEATHER API
+      const data = await getWeather(
+        location.latitude,
+        location.longitude
+      );
+
+      setWeather(data);
+
+      // CACHE
+      await saveWeather(data);
+
+    } catch (e: any) {
+
+      setError(e.message);
+
+      // fallback cache
+      const cached =
+        await getWeatherCache();
+
+      if (cached) {
+        setWeather(cached);
+      }
+
+    } finally {
+
+      setLoading(false);
+
+    }
+  };
+
+  useEffect(() => {
+    loadWeather();
+  }, []);
+
+  // LOADING SCREEN
+  if (loading) {
+    return (
+      <View style={styles.loader}>
+        <ActivityIndicator
+          size="large"
+          color="white"
         />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+      </View>
+    );
+  }
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  return (
+    <ScrollView style={styles.container}>
+
+      {/* TITLE */}
+      <Text style={styles.title}>
+        🌦️ Pogoda teraz
+      </Text>
+
+      {/* LOCATION */}
+      <Text style={styles.locationText}>
+        📍 {locationName}
+      </Text>
+
+      {/* ERROR */}
+      {error && (
+        <Text style={styles.error}>
+          {error}
+        </Text>
+      )}
+
+      {/* CURRENT WEATHER */}
+      {weather?.current && (
+        <>
+
+          <View style={styles.card}>
+
+            <Text style={styles.bigTemp}>
+              {weather.current.temperature_2m}°C
+            </Text>
+
+            <Text style={styles.info}>
+              💨 Wiatr:
+              {" "}
+              {weather.current.wind_speed_10m}
+              {" "}
+              km/h
+            </Text>
+
+            <Text style={styles.info}>
+              🌧️ Opad:
+              {" "}
+              {weather.current.precipitation}
+            </Text>
+
+          </View>
+
+          {/* MAP */}
+          <Text style={styles.section}>
+            📍 Lokalizacja GPS
+          </Text>
+
+          <MapCard
+            latitude={coords.latitude}
+            longitude={coords.longitude}
+          />
+
+          {/* CHART */}
+          <Text style={styles.section}>
+            📊 Temperatura 24h
+          </Text>
+
+          <TemperatureChart
+            temperatures={
+              weather.hourly.temperature_2m
+            }
+
+            times={
+              weather.hourly.time
+            }
+          />
+
+          {/* FORECAST */}
+          <Text style={styles.section}>
+            🕒 Prognoza godzinowa
+          </Text>
+
+          <HourlyForecast
+            times={weather.hourly.time}
+
+            temperatures={
+              weather.hourly.temperature_2m
+            }
+          />
+
+        </>
+      )}
+
+      {/* REFRESH */}
+      <View style={styles.refreshButton}>
+        <Button
+          title="Odśwież pogodę"
+          onPress={loadWeather}
+        />
+      </View>
+
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+
+  container: {
+    flex: 1,
+    backgroundColor: "#0f172a",
+    padding: 20,
   },
-  stepContainer: {
-    gap: 8,
+
+  loader: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#0f172a",
+  },
+
+  title: {
+    color: "white",
+    fontSize: 34,
+    fontWeight: "bold",
+    marginTop: 50,
     marginBottom: 8,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+
+  locationText: {
+    color: "#cbd5e1",
+    fontSize: 18,
+    marginBottom: 20,
   },
+
+  card: {
+    backgroundColor: "#1e293b",
+    borderRadius: 28,
+    padding: 24,
+
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+
+    elevation: 8,
+  },
+
+  bigTemp: {
+    color: "white",
+    fontSize: 54,
+    fontWeight: "bold",
+  },
+
+  info: {
+    color: "#cbd5e1",
+    fontSize: 18,
+    marginTop: 12,
+  },
+
+  section: {
+    color: "white",
+    fontSize: 24,
+    fontWeight: "bold",
+    marginTop: 30,
+    marginBottom: 12,
+  },
+
+  error: {
+    color: "#ef4444",
+    fontSize: 16,
+    marginBottom: 20,
+  },
+
+  refreshButton: {
+    marginTop: 30,
+    marginBottom: 50,
+  },
+
 });
